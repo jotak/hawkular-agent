@@ -23,32 +23,32 @@ import java.util.TreeMap;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
- * For h*metrics "Metric" json
+ * For h*metrics "StoreEntry" json
  * @author Joel Takvorian
  */
-class MetricDefinition implements Serializable {
-    @JsonProperty("id")
-    private final String id;
-    @JsonProperty("dataRetention")
-    private final int dataRetention;
+class BlobStoreEntry implements Serializable {
+    @JsonProperty("key")
+    private final String key;
+    @JsonProperty("value")
+    private final byte[] value;
     @JsonProperty("tags")
     private final Map<String, String> tags = new TreeMap<>();
 
-    MetricDefinition(String id, int dataRetention) {
-        this.id = id;
-        this.dataRetention = dataRetention;
+    BlobStoreEntry(String key, byte[] value) {
+        this.key = key;
+        this.value = value;
     }
 
     void addTag(String key, String value) {
         tags.put(key, value);
     }
 
-    public String getId() {
-        return id;
+    public String getKey() {
+        return key;
     }
 
-    public int getDataRetention() {
-        return dataRetention;
+    public byte[] getValue() {
+        return value;
     }
 
     public Map<String, String> getTags() {

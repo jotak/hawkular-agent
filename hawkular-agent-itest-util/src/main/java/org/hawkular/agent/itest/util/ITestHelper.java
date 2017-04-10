@@ -90,7 +90,6 @@ public class ITestHelper {
         try {
             JsonNode responseNode = mapper.readTree(responseBody);
             return StreamSupport.stream(responseNode.spliterator(), true)
-                    .map(node -> node.get("data"))
                     .map(this::rebuildFromChunks)
                     .filter(Optional::isPresent)
                     .map(Optional::get)
@@ -100,35 +99,13 @@ public class ITestHelper {
         }
     }
 
-    private Optional<ExtendedInventoryStructure> rebuildFromChunks(JsonNode dataNode) {
-        if (!dataNode.has(0)) {
-            return Optional.empty();
-        }
+    private Optional<ExtendedInventoryStructure> rebuildFromChunks(JsonNode blobNode) {
         try {
-            JsonNode masterNode = dataNode.get(0);
-            final byte[] all;
-            if (masterNode.has("tags") && masterNode.get("tags").has("chunks")) {
-                int nbChunks = masterNode.get("tags").get("chunks").asInt();
-                int totalSize = masterNode.get("tags").get("size").asInt();
-                byte[] master = masterNode.get("value").binaryValue();
-                if (master.length == 0) {
-                    return Optional.empty();
-                }
-                all = new byte[totalSize];
-                int pos = 0;
-                System.arraycopy(master, 0, all, pos, master.length);
-                pos += master.length;
-                for (int i = 1; i < nbChunks; i++) {
-                    JsonNode slaveNode = dataNode.get(i);
-                    byte[] slave = slaveNode.get("value").binaryValue();
-                    System.arraycopy(slave, 0, all, pos, slave.length);
-                    pos += slave.length;
-                }
-            } else {
-                // Not chunked
-                all = masterNode.get("value").binaryValue();
+            byte[] binary = blobNode.get("value").binaryValue();
+            if (binary == null || binary.length == 0) {
+                return Optional.empty();
             }
-            String decompressed = decompress(all);
+            String decompressed = decompress(binary);
             ExtendedInventoryStructure structure = mapper.readValue(decompressed, ExtendedInventoryStructure.class);
             return Optional.of(structure);
         } catch (Exception e) {
@@ -154,9 +131,7 @@ public class ITestHelper {
         // Fetch metrics by tag
         String url = baseInvUri + "/raw/query";
         String tags = "module:inventory,type:" + type + ",feed:" + feedId + ",id:" + id;
-        String params = "{\"tags\":\"" + tags + "\"," +
-                "\"fromEarliest\":true," +
-                "\"order\":\"DESC\"}";
+        String params = "{\"tags\":\"" + tags + "\"}";
         String response = getWithRetries(newAuthRequest()
                 .url(url)
                 .post(RequestBody.create(MediaType.parse("application/json"), params))
@@ -192,9 +167,7 @@ public class ITestHelper {
         // Fetch metrics by tag
         String url = baseInvUri + "/raw/query";
         String tags = "module:inventory,type:r,feed:" + feedId + ",restypes:.*|" + type + "|.*";
-        String params = "{\"tags\":\"" + tags + "\"," +
-                "\"fromEarliest\":true," +
-                "\"order\":\"DESC\"}";
+        String params = "{\"tags\":\"" + tags + "\"}";
         String response = getWithRetries(newAuthRequest()
                 .url(url)
                 .post(RequestBody.create(MediaType.parse("application/json"), params))

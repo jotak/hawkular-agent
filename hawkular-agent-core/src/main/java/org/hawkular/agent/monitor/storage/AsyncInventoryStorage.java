@@ -461,7 +461,7 @@ public class AsyncInventoryStorage implements InventoryStorage {
     private final HttpClientBuilder httpClientBuilder;
     private final Diagnostics diagnostics;
 
-    public AsyncInventoryStorage(
+    AsyncInventoryStorage(
             String feedId,
             StorageAdapterConfiguration config,
             HttpClientBuilder httpClientBuilder,
@@ -500,7 +500,7 @@ public class AsyncInventoryStorage implements InventoryStorage {
                     Map<String, String> headers = getTenantHeader(tenantIdToUse);
 
                     // The final URL should be in the form: strings/inventory.<feedid>.r.<resource_id>
-                    InventoryMetric metric = InventoryMetric.resource(feedId, removedResource.getID().getIDString(), null);
+                    InventoryBlob metric = InventoryBlob.resource(feedId, removedResource.getID().getIDString(), null);
                     deleteMetric(metric, headers);
                 } catch (InterruptedException ie) {
                     log.errorFailedToStoreInventoryData(ie);
@@ -513,9 +513,9 @@ public class AsyncInventoryStorage implements InventoryStorage {
         }
     }
 
-    private void deleteMetric(InventoryMetric metric, Map<String, String> headers) throws Exception {
+    private void deleteMetric(InventoryBlob metric, Map<String, String> headers) throws Exception {
         StringBuilder url = Util.getContextUrlString(config.getUrl(), config.getMetricsContext())
-                .append("strings/")
+                .append("blobstore/")
                 .append(metric.encodedName());
         Request request = this.httpClientBuilder.buildJsonDeleteRequest(url.toString(), headers);
         Call call = this.httpClientBuilder.getHttpClient().newCall(request);
@@ -574,7 +574,7 @@ public class AsyncInventoryStorage implements InventoryStorage {
         if (resourceStructure.getRoot() != null) {
             try {
                 Map<String, Collection<String>> resourceTypes = extractResourceTypes(resourceStructure);
-                InventoryMetric metric = InventoryMetric.resource(feedId, resourceStructure.getRoot().getId(), resourceTypes.keySet());
+                InventoryBlob metric = InventoryBlob.resource(feedId, resourceStructure.getRoot().getId(), resourceTypes.keySet());
                 syncInventoryData(metric, new ExtendedInventoryStructure(resourceStructure, resourceTypes), tenantIdToUse, totalResourceCount);
             } catch (InterruptedException ie) {
                 log.errorFailedToStoreInventoryData(ie);
@@ -618,7 +618,7 @@ public class AsyncInventoryStorage implements InventoryStorage {
             String tenantIdToUse) {
         if (resourceTypeStructure.getRoot() != null) {
             try {
-                InventoryMetric metric = InventoryMetric.resourceType(feedId, resourceTypeStructure.getRoot().getId());
+                InventoryBlob metric = InventoryBlob.resourceType(feedId, resourceTypeStructure.getRoot().getId());
                 syncInventoryData(metric, new ExtendedInventoryStructure(resourceTypeStructure, null), tenantIdToUse, 1);
             } catch (InterruptedException ie) {
                 log.errorFailedToStoreInventoryData(ie);
@@ -636,7 +636,7 @@ public class AsyncInventoryStorage implements InventoryStorage {
 
         if (metricTypeStructure.getRoot() != null) {
             try {
-                InventoryMetric metric = InventoryMetric.metricType(feedId, metricTypeStructure.getRoot().getId());
+                InventoryBlob metric = InventoryBlob.metricType(feedId, metricTypeStructure.getRoot().getId());
                 syncInventoryData(metric, new ExtendedInventoryStructure(metricTypeStructure, null), tenantIdToUse, 1);
             } catch (InterruptedException ie) {
                 log.errorFailedToStoreInventoryData(ie);
@@ -648,13 +648,10 @@ public class AsyncInventoryStorage implements InventoryStorage {
         }
     }
 
-    private void syncInventoryData(InventoryMetric metric, ExtendedInventoryStructure inventoryStructure, String tenantId, int totalResourceCount)
+    private void syncInventoryData(InventoryBlob metric, ExtendedInventoryStructure inventoryStructure, String tenantId, int totalResourceCount)
             throws Exception {
 
-        InventoryMetric.WithData metricChunks = compressAndChunk(metric, inventoryStructure);
-        if (metricChunks.isEmpty()) {
-            return;
-        }
+        InventoryBlob.WithData metricChunks = buildInventoryBlob(metric, inventoryStructure);
 
         Map<String, String> headers = getTenantHeader(tenantId);
         Timer.Context timer = diagnostics.getInventoryStorageRequestTimer().time();
@@ -663,7 +660,6 @@ public class AsyncInventoryStorage implements InventoryStorage {
             log.tracef("Syncing [%d] elements to inventory: headers=[%s] metric=[%s]", totalResourceCount, headers, metric.name());
 
             runSync(metricChunks, headers);
-            tagMetric(metricChunks, headers);
 
             if (totalResourceCount > 0) {
                 diagnostics.getInventoryRate().mark(totalResourceCount);
@@ -679,32 +675,14 @@ public class AsyncInventoryStorage implements InventoryStorage {
         }
     }
 
-    private void runSync(InventoryMetric.WithData metric, Map<String, String> headers) throws Exception {
+    private void runSync(InventoryBlob.WithData metric, Map<String, String> headers) throws Exception {
         StringBuilder url = Util.getContextUrlString(config.getUrl(), config.getMetricsContext())
-                .append("strings/")
-                .append(metric.encodedName())
-                .append("/raw");
-        Request request = httpClientBuilder.buildJsonPostRequest(url.toString(), headers, metric.getPayload());
-        Call call = httpClientBuilder.getHttpClient().newCall(request);
-        try (Response response = call.execute()) {
-            log.tracef("Received response while uploading chunks: code [%d]", response.code());
-            if (!response.isSuccessful()) {
-                throw new Exception("status-code=[" + response.code() + "], reason=["
-                        + response.message() + "], url=[" + request.url().toString() + "]");
-            }
-        }
-    }
-
-    private void tagMetric(InventoryMetric.WithData metric, Map<String, String> headers) throws Exception {
-
-        StringBuilder url = Util.getContextUrlString(config.getUrl(), config.getMetricsContext())
-                .append("strings?overwrite=true");
-        MetricDefinition def = metric.toMetricDefinition();
-
+                .append("blobstore");
+        BlobStoreEntry def = metric.toStoreEntry();
         Request request = httpClientBuilder.buildJsonPostRequest(url.toString(), headers, Util.toJson(def));
         Call call = httpClientBuilder.getHttpClient().newCall(request);
         try (Response response = call.execute()) {
-            log.tracef("Received response while committing chunks: code [%d]", response.code());
+            log.tracef("Received response while uploading inventory blob: code [%d]", response.code());
             if (!response.isSuccessful()) {
                 throw new Exception("status-code=[" + response.code() + "], reason=["
                         + response.message() + "], url=[" + request.url().toString() + "]");
@@ -712,7 +690,7 @@ public class AsyncInventoryStorage implements InventoryStorage {
         }
     }
 
-    private InventoryMetric.WithData compressAndChunk(InventoryMetric metric, ExtendedInventoryStructure inventoryStructure)
+    private InventoryBlob.WithData buildInventoryBlob(InventoryBlob metric, ExtendedInventoryStructure inventoryStructure)
                 throws IOException {
         String json = Util.toJson(inventoryStructure);
         ByteArrayOutputStream obj = new ByteArrayOutputStream();
@@ -720,20 +698,7 @@ public class AsyncInventoryStorage implements InventoryStorage {
         gzip.write(json.getBytes("UTF-8"));
         gzip.close();
         byte[] compressed = obj.toByteArray();
-        if (compressed.length <= CHUNKS_SIZE) {
-            // Don't chunk
-            return metric.full(compressed);
-        }
-        int pos = 0;
-        List<byte[]> chunks = new ArrayList<>();
-        while (pos < compressed.length) {
-            int size = Math.min(CHUNKS_SIZE, compressed.length - pos);
-            byte[] chunk = new byte[size];
-            System.arraycopy(compressed, pos, chunk, 0, size);
-            chunks.add(chunk);
-            pos += size;
-        }
-        return metric.chunks(chunks, compressed.length);
+        return metric.full(compressed);
     }
 
     /**

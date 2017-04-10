@@ -116,7 +116,7 @@ public abstract class AbstractITest {
         System.out.println("using REST user [" + hawkularTestUser + "] with password [" + hawkularTestPasword + "]");
         authentication = "{\"username\":\"" + hawkularTestUser + "\",\"password\":\"" + hawkularTestPasword + "\"}";
         baseMetricsUri = "http://" + hawkularHost + ":" + hawkularHttpPort + "/hawkular/metrics";
-        baseInvUri = baseMetricsUri + "/strings";
+        baseInvUri = baseMetricsUri + "/blobstore";
         baseGwUri = "ws://" + hawkularHost + ":" + hawkularHttpPort + "/hawkular/command-gateway";
         agentJolokiaUri = "http://" + hawkularHost + ":" + hawkularHttpPort + "/jolokia-war";
 

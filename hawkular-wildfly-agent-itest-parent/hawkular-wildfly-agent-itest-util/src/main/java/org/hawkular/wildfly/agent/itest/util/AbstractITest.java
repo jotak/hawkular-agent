@@ -100,7 +100,7 @@ public abstract class AbstractITest {
         hawkularHttpPort = hawkularPortOffset + 8080;
         hawkularManagementPort = hawkularPortOffset + 9990;
         baseMetricsUri = "http://" + hawkularHost + ":" + hawkularHttpPort + "/hawkular/metrics";
-        baseInvUri = baseMetricsUri + "/strings";
+        baseInvUri = baseMetricsUri + "/blobstore";
         baseGwUri = "ws://" + hawkularHost + ":" + hawkularHttpPort + "/hawkular/command-gateway";
         authentication = "{\"username\":\"" + testUser + "\",\"password\":\"" + testPasword + "\"}";
         System.out.println("using REST user [" + testUser + "] with password [" + testPasword + "]");
